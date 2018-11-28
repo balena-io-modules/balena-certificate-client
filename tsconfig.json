@@ -8,10 +8,10 @@
         "strictNullChecks": true,
         "sourceMap": true,
         "target": "es6",
-        "types": [ "bluebird-global" ],
         "noUnusedLocals": true,
         "noUnusedParameters": true,
-        "outDir": "build"
+        "outDir": "build",
+        "skipLibCheck": true
     },
     "include": [
         "typings/**/*.d.ts",

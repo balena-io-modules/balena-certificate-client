@@ -22,10 +22,10 @@ import mkdirp = require('mkdirp-promise');
 import * as mzfs from 'mz/fs';
 import { TypedError } from 'typed-error';
 
-import { DnsUpdateClient } from './dnsUpdateClient';
+import { DnsUpdateClient } from './dns-update-client';
 
 /**
- * Constructor options for the BalenaDevenvCertificateClient class.
+ * Constructor options for the BalenaCertificateClient class.
  */
 export interface CertificateClientOptions {
 	/** Host where the DNS update service is located */
@@ -42,11 +42,11 @@ export interface CertificateClientOptions {
  * Object used to pass details for the certificate to generate and IP to add DNS record for.
  */
 export interface CertificateRequestOptions {
-	/** UUID for Devenv instance */
-	uuid: string;
 	/** Domain required, eg. `somedomain.io` */
 	domain: string;
-	/** IP for local subnet location of Devenv */
+	/** Subdomains required, eg `*.1234567890abcdef`, `*.devices.1234567890abcdef`, `myserver`... */
+	subdomains: string[];
+	/** IP for local subnet location of device */
 	ip: string;
 	/**
 	 * Root location where both LetsEncrypt `config` directory and `certificates`
@@ -60,13 +60,13 @@ export interface CertificateRequestOptions {
 	 * attempt to renew too early (or create a new cert).
 	 */
 	renewing: boolean;
-	/**Email address of owner of Devenv (x@somedomainio) */
+	/** Email address of owner of device (x@somedomainio) */
 	email: string;
 }
 /**
  * Error codes denoting the type of error returned.
  */
-export enum CertificateClientErrorCodes {
+export const enum CertificateClientErrorCodes {
 	INVALID_TOKEN,
 	MISSING_CONFIG,
 	EXISTING_DOMAIN_CHALLENGE,
@@ -104,7 +104,7 @@ interface CertificateResult {
 /**
  * Certificate generation and DNS update client.
  */
-export class BalenaDevenvCertificateClient {
+export class BalenaCertificateClient {
 	private greenlock: Greenlock.GreenlockInstance;
 	private dnsClient: DnsUpdateClient;
 	private configDirectory: string;
@@ -137,7 +137,10 @@ export class BalenaDevenvCertificateClient {
 		// root
 		this.greenlock = Greenlock.create({
 			version: 'draft-12',
-			//server: 'https://acme-staging.api.letsencrypt.org/directory',
+			// The below is the Staging environment for LE, which can be used
+			// for development testing.
+			//server: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+			// The production LE service:
 			server: 'https://acme-v02.api.letsencrypt.org/directory',
 			store: LEStore.create({
 				configDir: this.configDirectory,
@@ -153,19 +156,13 @@ export class BalenaDevenvCertificateClient {
 	}
 
 	// For brevity, we're returning a full challenge object
-	private dnsChallenge(options?: any) {
+	private dnsChallenge(options?: Greenlock.CreateOptions): Greenlock.Challenge {
 		return {
 			getOptions: () => {
 				return options || {};
 			},
 
-			set: (
-				_args: any,
-				domain: any,
-				_challenge: any,
-				keyAuthorization: any,
-				callback: (opt: any | null) => any,
-			) => {
+			set: (_args, domain, _challenge, keyAuthorization, callback) => {
 				const txtDomain = `_acme-challenge.${domain}`;
 				var keyAuthDigest = require('crypto')
 					.createHash('sha256')
@@ -177,57 +174,41 @@ export class BalenaDevenvCertificateClient {
 
 				// Add this to the challenge map, so we can remove it later
 				// If there's already an entry, we do not honour this and throw an error
-				if (this.challengeMap.has(txtDomain)) {
-					callback(
-						new CertificateClientError(
+				Promise.try(() => {
+					if (this.challengeMap.has(txtDomain)) {
+						throw new CertificateClientError(
 							CertificateClientErrorCodes.EXISTING_CERTIFICATE,
 							'A challenge for a certificate already exists',
-						),
-					);
-					return;
-				}
-				this.challengeMap.set(txtDomain, keyAuthDigest);
+						);
+					}
+					this.challengeMap.set(txtDomain, keyAuthDigest);
 
-				// Once the call returns, we'll be ready for the challenge to be tested
-				this.dnsClient
-					.updateTxtRecord(txtDomain, keyAuthDigest)
-					.asCallback(callback);
+					// Once the call returns, we'll be ready for the challenge to be tested
+					return this.dnsClient.updateTxtRecord(txtDomain, keyAuthDigest);
+				}).asCallback(callback);
 			},
 
-			get: (
-				_defaults: any,
-				_domain: any,
-				_challenge: any,
-				callback: (opt: any | null) => void,
-			) => {
+			get: (_defaults, _domain, _challenge, callback) => {
 				// We don't do anything.
 				callback(null);
 			},
 
-			remove: (
-				_args: any,
-				domain: any,
-				_challenge: any,
-				callback: (opt: any | null) => void,
-			) => {
+			remove: (_args, domain, _challenge, callback) => {
 				const txtDomain = `_acme-challenge.${domain}`;
 
 				// Retrieve the appropriate text from the challenge map
-				const keyAuthDigest = this.challengeMap.get(txtDomain);
-				if (!keyAuthDigest) {
-					callback(
-						new CertificateClientError(
+				Promise.try(() => {
+					const keyAuthDigest = this.challengeMap.get(txtDomain);
+					if (!keyAuthDigest) {
+						throw new CertificateClientError(
 							CertificateClientErrorCodes.MISSING_DOMAIN_CHALLENGE,
 							'The challenge text for a domain is missing from the challenge map',
-						),
-					);
-					return;
-				}
+						);
+					}
 
-				// Once the call returns, the record has been removed
-				this.dnsClient
-					.removeTxtRecord(txtDomain, keyAuthDigest)
-					.asCallback(callback);
+					// Once the call returns, the record has been removed
+					return this.dnsClient.removeTxtRecord(txtDomain, keyAuthDigest);
+				}).asCallback(callback);
 			},
 		};
 	}
@@ -242,14 +223,22 @@ export class BalenaDevenvCertificateClient {
 	// LetsEncrypt, and a new A record will be globally available for the UUID
 	public requestCertificate(
 		certRequest: CertificateRequestOptions,
-	): Promise<CertificateResult> {
+	): Promise<CertificateResult | null> {
 		const greenlockInst = this.greenlock;
 		const outDir = certRequest.outputLocation;
-		const requestDomains = [
-			`*.${certRequest.uuid}.${certRequest.domain}`,
-			`*.devices.${certRequest.uuid}.${certRequest.domain}`,
-		];
-		let certificates: CertificateResult;
+		const domain = certRequest.domain;
+		const subdomains = certRequest.subdomains;
+		const requestDomains = !subdomains
+			? [domain]
+			: _.reduce(
+					subdomains,
+					(result, value) => {
+						result.push(`${value}.${domain}`);
+						return result;
+					},
+					[''],
+			  ).slice(1);
+		let certificates: CertificateResult | null = null;
 
 		return greenlockInst
 			.check({ domains: requestDomains })
@@ -294,7 +283,7 @@ export class BalenaDevenvCertificateClient {
 							const outFiles = [
 								{ file: `${outDir}/ca.pem`, data: certificates.ca },
 								{
-									file: `${outDir}/privateKey.pem`,
+									file: `${outDir}/private-key.pem`,
 									data: certificates.privateKey,
 								},
 								{
@@ -306,9 +295,7 @@ export class BalenaDevenvCertificateClient {
 							resultPromise = mkdirp(outDir).then(() => {
 								return Promise.map(outFiles, entry => {
 									return mzfs.writeFile(entry.file, entry.data);
-								}).then(() => {
-									return;
-								});
+								}).return();
 							});
 						}
 
@@ -317,13 +304,11 @@ export class BalenaDevenvCertificateClient {
 			})
 			.then(() => {
 				// Create/Update a DNS A record with the given IP
-				return Promise.map(requestDomains, domain => {
-					return this.dnsClient.updateARecord(domain, certRequest.ip);
+				return Promise.map(requestDomains, newDomain => {
+					return this.dnsClient.updateARecord(newDomain, certRequest.ip);
 				});
 			})
-			.then(() => {
-				return certificates;
-			})
+			.return(certificates)
 			.catch((error: Error) => {
 				// If the returned error is about tokens, we use that.
 				if (

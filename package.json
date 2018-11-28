@@ -1,21 +1,20 @@
 {
-  "name": "balena-devenv-certificate-client",
-  "version": "0.0.1",
-  "description": "Register certificates and A records for a specific Devenv",
-  "homepage": "https://github.com/balena-io/balena-devenv-certificate-client",
+  "name": "balena-certificate-client",
+  "version": "1.0.0",
+  "description": "Register certificates and A records for a device",
+  "homepage": "https://github.com/balena-io/balena-certificate-client",
   "preferGlobal": true,
   "keywords": [
-    "balena",
-    "devenv"
+    "balena"
   ],
   "author": "Heds Simons <heds@balena.io>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/balena-io/balena-devenv-certificate-client.git"
+    "url": "git+https://github.com/balena-io/balena-certificate-client.git"
   },
   "bugs": {
-    "url": "https://github.com/balena-io/balena-devenv-certificate-client/issues"
+    "url": "https://github.com/balena-io/balena-certificate-client/issues"
   },
   "main": "./build/client.js",
   "types": "./build/client.d.ts",
@@ -24,7 +23,12 @@
     "build": "tsc",
     "prettify": "prettier --config ./node_modules/resin-lint/config/.prettierrc --write \"src/**/*.ts\" \"typings/**/*.ts\" \"test/**/*.ts\"",
     "lint": "resin-lint --typescript src/ test/ && tsc --noEmit",
-    "test": "nyc mocha 'test/**/*.spec.ts' --timeout 10000"
+    "test": "nyc mocha 'test/**/*.spec.ts'"
+  },
+  "nyc": {
+    "extension": [
+      ".ts"
+    ]
   },
   "devDependencies": {
     "@types/bluebird": "^3.5.24",
@@ -59,7 +63,7 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "lint-staged",
+      "pre-commit": "lint-staged && npm run build && git add build",
       "pre-push": "npm run lint"
     }
   },

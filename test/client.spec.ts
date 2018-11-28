@@ -13,8 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-///<reference path="../typings/greenlock.d.ts"/>
-///<reference path="../typings/le-store-certbot.d.ts"/>
 import * as Bluebird from 'bluebird';
 import * as chai from 'chai';
 import * as chaiAsPromised from 'chai-as-promised';
@@ -23,7 +21,7 @@ import 'mocha';
 import * as DNS from 'dns';
 
 import {
-	BalenaDevenvCertificateClient,
+	BalenaCertificateClient,
 	CertificateClientError,
 	CertificateClientErrorCodes,
 } from '../src/client';
@@ -33,19 +31,19 @@ chai.use(chaiAsPromised);
 const { should } = chai.should();
 should.exist;
 
-const dnsHost = process.env.DEVENV_CERT_TEST_HOST || '';
-const dnsPort = parseInt(process.env.DEVENV_CERT_TEST_PORT || '0', 10);
-const domain = process.env.DEVENV_CERT_TEST_DOMAIN || '';
-const email = process.env.DEVENV_CERT_TEST_EMAIL || '';
+const dnsHost = process.env.CERT_TEST_HOST || '';
+const dnsPort = parseInt(process.env.CERT_TEST_PORT || '0', 10);
+const domain = process.env.CERT_TEST_DOMAIN || '';
+const email = process.env.CERT_TEST_EMAIL || '';
 
-describe('Devenv Certificate Client', () => {
+describe('Certificate Client', () => {
 	const uuid = '1234567890';
 
 	// We should fail if the host or the authentication token is invalid
 	describe('Invalid config/authorisation details', () => {
 		it('should fail for bad DNS service host details', () => {
 			try {
-				new BalenaDevenvCertificateClient({
+				new BalenaCertificateClient({
 					dnsUpdateHost: '',
 					dnsUpdatePort: 0,
 					authToken: '1234',
@@ -57,7 +55,7 @@ describe('Devenv Certificate Client', () => {
 		});
 
 		it('should fail if auth token is invalid', () => {
-			const client = new BalenaDevenvCertificateClient({
+			const client = new BalenaCertificateClient({
 				dnsUpdateHost: dnsHost,
 				dnsUpdatePort: dnsPort,
 				authToken: '1234',
@@ -66,8 +64,8 @@ describe('Devenv Certificate Client', () => {
 
 			return client
 				.requestCertificate({
-					uuid,
 					domain: 'nonexistant.io',
+					subdomains: ['12345', 'abcde'],
 					ip: '1.2.3.4',
 					email: 'nobody@nonexistant.io',
 					renewing: false,
@@ -90,22 +88,25 @@ describe('Devenv Certificate Client', () => {
 		const testIP = '10.1.2.3';
 
 		it('should generate a valid certificate', () => {
-			const client = new BalenaDevenvCertificateClient({
+			const client = new BalenaCertificateClient({
 				dnsUpdateHost: dnsHost,
 				dnsUpdatePort: dnsPort,
-				authToken: process.env.DEVENV_CERT_TEST_AUTH_TOKEN || '',
+				authToken: process.env.CERT_TEST_AUTH_TOKEN || '',
 				configRoot: `${process.cwd()}/test/testcert`,
 			});
 
 			return client
 				.requestCertificate({
-					uuid: '1234567890',
 					domain,
+					subdomains: [`*.${uuid}`, `*.devices.${uuid}`],
 					ip: '10.1.2.3',
 					email,
 					renewing: false,
 				})
 				.then(result => {
+					if (!result) {
+						return new Error('result should not be undefined');
+					}
 					result.certificate.should.include('BEGIN CERTIFICATE');
 					result.ca.should.include('BEGIN CERTIFICATE');
 					result.privateKey.should.include('BEGIN RSA PRIVATE KEY');
@@ -115,8 +116,8 @@ describe('Devenv Certificate Client', () => {
 		it('relevant hostname URIs should point to a valid A records', () => {
 			return Bluebird.map(
 				[
-					`api.${uuid}.${process.env.DEVENV_CERT_TEST_DOMAIN}`,
-					`actions.devices.${uuid}.${process.env.DEVENV_CERT_TEST_DOMAIN}`,
+					`api.${uuid}.${process.env.CERT_TEST_DOMAIN}`,
+					`actions.devices.${uuid}.${process.env.CERT_TEST_DOMAIN}`,
 				],
 				uri => {
 					return Bluebird.fromCallback<string>(cb => {

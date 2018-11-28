@@ -1,24 +1,24 @@
 declare module 'greenlock' {
 	export interface Challenge {
-		getOptions: () => any;
+		getOptions: () => CreateOptions;
 		set: (
-			args: any,
-			domain: any,
-			challenge: any,
-			keyAuthorization: any,
-			callback: () => any,
+			args: CreateOptions,
+			domain: string,
+			challenge: string,
+			keyAuthorization: string,
+			callback: (err: Error | null, opt?: CreateOptions) => void,
 		) => void;
 		get: (
 			defaults: any,
-			domain: any,
-			challenge: any,
-			callback: () => void,
+			domain: string,
+			challenge: string,
+			callback: (err: Error | null, opt?: CreateOptions) => void,
 		) => void;
 		remove: (
 			args: any,
-			domain: any,
-			challenge: any,
-			callback: () => void,
+			domain: string,
+			challenge: string,
+			callback: (err: Error | null, opt?: CreateOptions) => void,
 		) => void;
 	}
 

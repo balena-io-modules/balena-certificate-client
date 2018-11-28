@@ -32,12 +32,12 @@ export interface DnsUpdateOptions {
  * Client to talk to the DNS service.
  */
 export class DnsUpdateClient {
-	private hostURL: string;
+	private hostUrl: string;
 	private authToken: string;
 
 	constructor(constructOpts: DnsUpdateOptions) {
 		// Verify this is a valid URL
-		this.hostURL = `${constructOpts.host}:${constructOpts.port}`;
+		this.hostUrl = `${constructOpts.host}:${constructOpts.port}`;
 		this.authToken = constructOpts.authToken;
 	}
 
@@ -47,7 +47,7 @@ export class DnsUpdateClient {
 		// Header: "Authorization: token"
 		// body: { text }
 		return request({
-			uri: `${this.hostURL}/txt/${domain}`,
+			uri: `${this.hostUrl}/txt/${domain}`,
 			json: true,
 			method: 'POST',
 			headers: {
@@ -65,7 +65,7 @@ export class DnsUpdateClient {
 		// Header: "Authorization: token"
 		// body: { text }
 		return request({
-			uri: `${this.hostURL}/txt/${domain}`,
+			uri: `${this.hostUrl}/txt/${domain}`,
 			json: true,
 			method: 'DELETE',
 			headers: {
@@ -83,7 +83,7 @@ export class DnsUpdateClient {
 		// Header: "Authorization: token"
 		// body: { ip }
 		return request({
-			uri: `${this.hostURL}/a/${domain}`,
+			uri: `${this.hostUrl}/a/${domain}`,
 			json: true,
 			method: 'POST',
 			headers: {
@@ -95,13 +95,13 @@ export class DnsUpdateClient {
 		}).promise();
 	}
 
-	// Remove an A record. Ideally this should be called when a Devenv is destroyed
+	// Remove an A record. Ideally this should be called when a device is destroyed
 	public removeARecord(domain: string, ip: string): Promise<void> {
 		// DELETE /a/{domain}
 		// Header: "Authorization: token"
 		// body: { ip }
 		return request({
-			uri: `${this.hostURL}/a/${domain}`,
+			uri: `${this.hostUrl}/a/${domain}`,
 			json: true,
 			method: 'DELETE',
 			headers: {
