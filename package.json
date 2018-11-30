@@ -18,7 +18,6 @@
   },
   "main": "./build/client.js",
   "types": "./build/client.d.ts",
-  "private": true,
   "scripts": {
     "build": "tsc",
     "prettify": "prettier --config ./node_modules/resin-lint/config/.prettierrc --write \"src/**/*.ts\" \"typings/**/*.ts\" \"test/**/*.ts\"",
