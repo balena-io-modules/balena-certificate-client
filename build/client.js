@@ -152,7 +152,9 @@ class BalenaCertificateClient {
                 return this.dnsClient.updateARecord(newDomain, certRequest.ip);
             });
         })
-            .return(certificates)
+            .then(() => {
+            return certificates;
+        })
             .catch((error) => {
             if (_.includes(error.message, 'A valid bearer token must be included in the request')) {
                 throw new CertificateClientError(0, 'The passed bearer token was invalid');
