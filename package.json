@@ -1,6 +1,6 @@
 {
   "name": "balena-certificate-client",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Register certificates and A records for a device",
   "homepage": "https://github.com/balena-io/balena-certificate-client",
   "preferGlobal": true,
