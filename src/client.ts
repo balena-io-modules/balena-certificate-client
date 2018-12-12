@@ -307,7 +307,10 @@ export class BalenaCertificateClient {
 					return this.dnsClient.updateARecord(newDomain, certRequest.ip);
 				});
 			})
-			.return(certificates)
+			.then(() => {
+				// Return newly bound certificates
+				return certificates;
+			})
 			.catch((error: Error) => {
 				// If the returned error is about tokens, we use that.
 				if (
