@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-import * as Promise from 'bluebird';
+import * as Bluebird from 'bluebird';
 import * as request from 'request-promise';
 
 /**
@@ -42,7 +42,7 @@ export class DnsUpdateClient {
 	}
 
 	// Create/update a TXT record
-	public updateTxtRecord(domain: string, text: string): Promise<void> {
+	public updateTxtRecord(domain: string, text: string): Bluebird<void> {
 		// POST /txt/{subdomain}
 		// Header: "Authorization: token"
 		// body: { text }
@@ -60,7 +60,7 @@ export class DnsUpdateClient {
 	}
 
 	// This will remove the given TXT record (should it exist)
-	public removeTxtRecord(domain: string, text: string): Promise<void> {
+	public removeTxtRecord(domain: string, text: string): Bluebird<void> {
 		// DELETE /txt/{domain}
 		// Header: "Authorization: token"
 		// body: { text }
@@ -78,7 +78,7 @@ export class DnsUpdateClient {
 	}
 
 	// Either create or update an existing A record
-	public updateARecord(domain: string, ip: string): Promise<void> {
+	public updateARecord(domain: string, ip: string): Bluebird<void> {
 		// POST /a/{domain}
 		// Header: "Authorization: token"
 		// body: { ip }
@@ -96,7 +96,7 @@ export class DnsUpdateClient {
 	}
 
 	// Remove an A record. Ideally this should be called when a device is destroyed
-	public removeARecord(domain: string, ip: string): Promise<void> {
+	public removeARecord(domain: string, ip: string): Bluebird<void> {
 		// DELETE /a/{domain}
 		// Header: "Authorization: token"
 		// body: { ip }

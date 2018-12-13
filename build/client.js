@@ -1,6 +1,14 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const Promise = require("bluebird");
+const Bluebird = require("bluebird");
 const Greenlock = require("greenlock");
 const LEStore = require("le-store-certbot");
 const _ = require("lodash");
@@ -68,7 +76,7 @@ class BalenaCertificateClient {
                     .replace(/\+/g, '-')
                     .replace(/\//g, '_')
                     .replace(/=+$/g, '');
-                Promise.try(() => {
+                Bluebird.try(() => {
                     if (this.challengeMap.has(txtDomain)) {
                         throw new CertificateClientError(4, 'A challenge for a certificate already exists');
                     }
@@ -81,7 +89,7 @@ class BalenaCertificateClient {
             },
             remove: (_args, domain, _challenge, callback) => {
                 const txtDomain = `_acme-challenge.${domain}`;
-                Promise.try(() => {
+                Bluebird.try(() => {
                     const keyAuthDigest = this.challengeMap.get(txtDomain);
                     if (!keyAuthDigest) {
                         throw new CertificateClientError(3, 'The challenge text for a domain is missing from the challenge map');
@@ -92,74 +100,66 @@ class BalenaCertificateClient {
         };
     }
     requestCertificate(certRequest) {
-        const greenlockInst = this.greenlock;
-        const outDir = certRequest.outputLocation;
-        const domain = certRequest.domain;
-        const subdomains = certRequest.subdomains;
-        const requestDomains = !subdomains
-            ? [domain]
-            : _.reduce(subdomains, (result, value) => {
-                result.push(`${value}.${domain}`);
-                return result;
-            }, ['']).slice(1);
-        let certificates = null;
-        return greenlockInst
-            .check({ domains: requestDomains })
-            .then(function (results) {
-            if (results) {
-                if (!certRequest.renewing) {
-                    throw new CertificateClientError(4, 'A certificate already exists for the requested domain');
-                }
-            }
-            return greenlockInst
-                .register({
-                domains: requestDomains,
-                email: certRequest.email,
-                agreeTos: true,
-                rsaKeySize: 2048,
-                challengeType: 'dns-01',
-            })
-                .then((results) => {
-                certificates = {
-                    ca: results.chain,
-                    privateKey: results.privkey,
-                    certificate: results.cert,
-                };
-                let resultPromise = Promise.resolve();
-                if (outDir) {
-                    const outFiles = [
-                        { file: `${outDir}/ca.pem`, data: certificates.ca },
-                        {
-                            file: `${outDir}/private-key.pem`,
-                            data: certificates.privateKey,
-                        },
-                        {
-                            file: `${outDir}/certificate.pem`,
-                            data: certificates.certificate,
-                        },
-                    ];
-                    resultPromise = mkdirp(outDir).then(() => {
-                        return Promise.map(outFiles, entry => {
-                            return mzfs.writeFile(entry.file, entry.data);
-                        }).return();
+        return __awaiter(this, void 0, void 0, function* () {
+            const greenlockInst = this.greenlock;
+            const outDir = certRequest.outputLocation;
+            const domain = certRequest.domain;
+            const subdomains = certRequest.subdomains;
+            const requestDomains = !subdomains
+                ? [domain]
+                : _.reduce(subdomains, (result, value) => {
+                    result.push(`${value}.${domain}`);
+                    return result;
+                }, ['']).slice(1);
+            let certificates = null;
+            let certsExist;
+            try {
+                certsExist = yield greenlockInst.check({ domains: requestDomains });
+                if (!certsExist) {
+                    const results = yield greenlockInst.register({
+                        domains: requestDomains,
+                        email: certRequest.email,
+                        agreeTos: true,
+                        rsaKeySize: 2048,
+                        challengeType: 'dns-01',
                     });
+                    certificates = {
+                        ca: results.chain,
+                        privateKey: results.privkey,
+                        certificate: results.cert,
+                    };
+                    if (outDir) {
+                        const outFiles = [
+                            { file: `${outDir}/ca.pem`, data: certificates.ca },
+                            {
+                                file: `${outDir}/private-key.pem`,
+                                data: certificates.privateKey,
+                            },
+                            {
+                                file: `${outDir}/certificate.pem`,
+                                data: certificates.certificate,
+                            },
+                        ];
+                        yield mkdirp(outDir);
+                        yield Bluebird.map(outFiles, (entry) => __awaiter(this, void 0, void 0, function* () {
+                            yield mzfs.writeFile(entry.file, entry.data);
+                        }));
+                    }
                 }
-                return resultPromise;
-            });
-        })
-            .then(() => {
-            return Promise.map(requestDomains, newDomain => {
-                return this.dnsClient.updateARecord(newDomain, certRequest.ip);
-            });
-        })
-            .then(() => {
-            return certificates;
-        })
-            .catch((error) => {
-            if (_.includes(error.message, 'A valid bearer token must be included in the request')) {
-                throw new CertificateClientError(0, 'The passed bearer token was invalid');
+                yield Bluebird.map(requestDomains, (newDomain) => __awaiter(this, void 0, void 0, function* () {
+                    yield this.dnsClient.updateARecord(newDomain, certRequest.ip);
+                }));
             }
-            throw error;
+            catch (error) {
+                if (_.includes(error.message, 'A valid bearer token must be included in the request')) {
+                    throw new CertificateClientError(0, 'The passed bearer token was invalid');
+                }
+                throw error;
+            }
+            if (certsExist) {
+                throw new CertificateClientError(4, 'A certificate already exists for the requested domain');
+            }
+            return certificates;
         });
     }
 }
