@@ -94,7 +94,7 @@ export class CertificateClientError extends TypedError {
  * Returned by the requestCertificate when a certificate has successfully been generated
  * and the DNS entry updated.
  */
-interface CertificateResult {
+export interface CertificateResult {
 	ca: string;
 	privateKey: string;
 	certificate: string;

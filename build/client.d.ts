@@ -27,7 +27,7 @@ export declare class CertificateClientError extends TypedError {
     code: number;
     constructor(code: number, message: string);
 }
-interface CertificateResult {
+export interface CertificateResult {
     ca: string;
     privateKey: string;
     certificate: string;
@@ -41,4 +41,3 @@ export declare class BalenaCertificateClient {
     private dnsChallenge;
     requestCertificate(certRequest: CertificateRequestOptions): Promise<CertificateResult | null>;
 }
-export {};
