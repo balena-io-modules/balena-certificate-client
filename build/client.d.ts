@@ -1,4 +1,3 @@
-import * as Promise from 'bluebird';
 import { TypedError } from 'typed-error';
 export interface CertificateClientOptions {
     dnsUpdateHost: string;

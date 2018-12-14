@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-import * as Promise from 'bluebird';
+import * as Bluebird from 'bluebird';
 import * as Greenlock from 'greenlock';
 import LEStore = require('le-store-certbot');
 import * as _ from 'lodash';
@@ -173,7 +173,7 @@ export class BalenaCertificateClient {
 
 				// Add this to the challenge map, so we can remove it later
 				// If there's already an entry, we do not honour this and throw an error
-				Promise.try(() => {
+				Bluebird.try(() => {
 					if (this.challengeMap.has(txtDomain)) {
 						throw new CertificateClientError(
 							CertificateClientErrorCodes.EXISTING_CERTIFICATE,
@@ -196,7 +196,7 @@ export class BalenaCertificateClient {
 				const txtDomain = `_acme-challenge.${domain}`;
 
 				// Retrieve the appropriate text from the challenge map
-				Promise.try(() => {
+				Bluebird.try(() => {
 					const keyAuthDigest = this.challengeMap.get(txtDomain);
 					if (!keyAuthDigest) {
 						throw new CertificateClientError(
@@ -220,7 +220,7 @@ export class BalenaCertificateClient {
 	// Or fail
 	// On return, the resultLocation will include the certificate chains returned from
 	// LetsEncrypt, and a new A record will be globally available for the UUID
-	public requestCertificate(
+	public async requestCertificate(
 		certRequest: CertificateRequestOptions,
 	): Promise<CertificateResult | null> {
 		const greenlockInst = this.greenlock;
@@ -238,93 +238,82 @@ export class BalenaCertificateClient {
 					[''],
 			  ).slice(1);
 		let certificates: CertificateResult | null = null;
+		let certsExist: Greenlock.CertificateResults;
 
-		return greenlockInst
-			.check({ domains: requestDomains })
-			.then(function(results) {
-				// We already have certificates here, but we don't know if they're about to
-				// expire. We should ideally pass a flag.
-				if (results) {
-					if (!certRequest.renewing) {
-						throw new CertificateClientError(
-							CertificateClientErrorCodes.EXISTING_CERTIFICATE,
-							'A certificate already exists for the requested domain',
-						);
-					}
-				}
-
-				// Attempt to grab new certificate
-				return greenlockInst
-					.register({
-						domains: requestDomains,
-						email: certRequest.email,
-						agreeTos: true,
-						rsaKeySize: 2048,
-						challengeType: 'dns-01',
-					})
-					.then((results: Greenlock.CertificateResults) => {
-						certificates = {
-							ca: results.chain,
-							privateKey: results.privkey,
-							certificate: results.cert,
-						};
-						let resultPromise = Promise.resolve();
-
-						// The certificates will be stored along with the config in the
-						// chosen directory. However, it's possible we've been given
-						// a location to store the key, eec and CA, so if so we'll
-						// save them there, too.
-						// We only store:
-						//  * Private key
-						//  * CA
-						//  * EEC
-						if (outDir) {
-							const outFiles = [
-								{ file: `${outDir}/ca.pem`, data: certificates.ca },
-								{
-									file: `${outDir}/private-key.pem`,
-									data: certificates.privateKey,
-								},
-								{
-									file: `${outDir}/certificate.pem`,
-									data: certificates.certificate,
-								},
-							];
-
-							resultPromise = mkdirp(outDir).then(() => {
-								return Promise.map(outFiles, entry => {
-									return mzfs.writeFile(entry.file, entry.data);
-								}).return();
-							});
-						}
-
-						return resultPromise;
-					});
-			})
-			.then(() => {
-				// Create/Update a DNS A record with the given IP
-				return Promise.map(requestDomains, newDomain => {
-					return this.dnsClient.updateARecord(newDomain, certRequest.ip);
+		try {
+			certsExist = await greenlockInst.check({ domains: requestDomains });
+			if (!certsExist) {
+				const results = await greenlockInst.register({
+					domains: requestDomains,
+					email: certRequest.email,
+					agreeTos: true,
+					rsaKeySize: 2048,
+					challengeType: 'dns-01',
 				});
-			})
-			.then(() => {
-				// Return newly bound certificates
-				return certificates;
-			})
-			.catch((error: Error) => {
-				// If the returned error is about tokens, we use that.
-				if (
-					_.includes(
-						error.message,
-						'A valid bearer token must be included in the request',
-					)
-				) {
-					throw new CertificateClientError(
-						CertificateClientErrorCodes.INVALID_TOKEN,
-						'The passed bearer token was invalid',
-					);
+
+				certificates = {
+					ca: results.chain,
+					privateKey: results.privkey,
+					certificate: results.cert,
+				};
+
+				// The certificates will be stored along with the config in the
+				// chosen directory. However, it's possible we've been given
+				// a location to store the key, eec and CA, so if so we'll
+				// save them there, too.
+				// We only store:
+				//  * Private key
+				//  * CA
+				//  * EEC
+				if (outDir) {
+					const outFiles = [
+						{ file: `${outDir}/ca.pem`, data: certificates.ca },
+						{
+							file: `${outDir}/private-key.pem`,
+							data: certificates.privateKey,
+						},
+						{
+							file: `${outDir}/certificate.pem`,
+							data: certificates.certificate,
+						},
+					];
+
+					await mkdirp(outDir);
+					await Bluebird.map(outFiles, async entry => {
+						await mzfs.writeFile(entry.file, entry.data);
+					});
 				}
-				throw error;
+			}
+
+			// Regardless of whether certs were generated or not, create/update a DNS A
+			// record with the given IP
+			await Bluebird.map(requestDomains, async newDomain => {
+				await this.dnsClient.updateARecord(newDomain, certRequest.ip);
 			});
+		} catch (error) {
+			// If the returned error is about tokens, we use that.
+			if (
+				_.includes(
+					error.message,
+					'A valid bearer token must be included in the request',
+				)
+			) {
+				throw new CertificateClientError(
+					CertificateClientErrorCodes.INVALID_TOKEN,
+					'The passed bearer token was invalid',
+				);
+			}
+			throw error;
+		}
+
+		// If certifcates already existed, we throw an error.
+		if (certsExist) {
+			throw new CertificateClientError(
+				CertificateClientErrorCodes.EXISTING_CERTIFICATE,
+				'A certificate already exists for the requested domain',
+			);
+		}
+
+		return certificates;
 	}
 }
