@@ -28,6 +28,11 @@ export interface DnsUpdateOptions {
 	authToken: string;
 }
 
+export interface DnsARecord {
+	domain: string;
+	ip: string;
+}
+
 /**
  * Client to talk to the DNS service.
  */
@@ -109,6 +114,20 @@ export class DnsUpdateClient {
 			},
 			body: {
 				ip,
+			},
+		}).promise();
+	}
+
+	// Retrieves an A record. This helps ensure we don't carry out unneccesary updates
+	public retrieveARecords(domain: string): Bluebird<DnsARecord[]> {
+		// GET /a/{domain}
+		// Header: "Authorization: token"
+		return request({
+			uri: `${this.hostUrl}/a/${domain}`,
+			json: true,
+			method: 'GET',
+			headers: {
+				Authorization: this.authToken,
 			},
 		}).promise();
 	}

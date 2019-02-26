@@ -146,7 +146,12 @@ class BalenaCertificateClient {
                         }));
                     }
                 }
-                yield Bluebird.map(requestDomains, (newDomain) => __awaiter(this, void 0, void 0, function* () {
+                const records = yield this.dnsClient.retrieveARecords(domain);
+                const finalDomains = _.filter(requestDomains, domain => {
+                    const matchingDomain = _.find(records, record => record.domain === domain);
+                    return matchingDomain ? !(matchingDomain.ip === certRequest.ip) : true;
+                });
+                yield Bluebird.map(finalDomains, (newDomain) => __awaiter(this, void 0, void 0, function* () {
                     yield this.dnsClient.updateARecord(newDomain, certRequest.ip);
                 }));
             }
