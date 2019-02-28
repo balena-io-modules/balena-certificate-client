@@ -285,9 +285,22 @@ export class BalenaCertificateClient {
 				}
 			}
 
+			// If the current domains we want match those retrieved *and* the IP
+			// address is the same, we don't carry out the expensive update request
+			// Test the IPs and filter the requests down to only those domains whose
+			// IP addresses do not match.
+			const records = await this.dnsClient.retrieveARecords(domain);
+			const finalDomains = _.filter(requestDomains, domain => {
+				const matchingDomain = _.find(
+					records,
+					record => record.domain === domain,
+				);
+				return matchingDomain ? !(matchingDomain.ip === certRequest.ip) : true;
+			});
+
 			// Regardless of whether certs were generated or not, create/update a DNS A
 			// record with the given IP
-			await Bluebird.map(requestDomains, async newDomain => {
+			await Bluebird.map(finalDomains, async newDomain => {
 				await this.dnsClient.updateARecord(newDomain, certRequest.ip);
 			});
 		} catch (error) {

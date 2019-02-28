@@ -58,6 +58,16 @@ class DnsUpdateClient {
             },
         }).promise();
     }
+    retrieveARecords(domain) {
+        return request({
+            uri: `${this.hostUrl}/a/${domain}`,
+            json: true,
+            method: 'GET',
+            headers: {
+                Authorization: this.authToken,
+            },
+        }).promise();
+    }
 }
 exports.DnsUpdateClient = DnsUpdateClient;
 //# sourceMappingURL=dns-update-client.js.map
